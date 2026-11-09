@@ -1,313 +1,118 @@
 # Modern KK Learning Site Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build and publish a motivating, mobile-friendly learning site for the 41-sound modern American KK curriculum defined in the approved design.
+**Goal:** 把现有英美混合单页改成只教 41 个现代美式 KK 的静态学习站，并发布到 GitHub Pages。
 
-**Architecture:** Replace the monolithic HTML with a zero-build ES-module static site. Keep curriculum data, audio playback, progress persistence, and rendering in focused modules; use Node's built-in test runner for data and state logic, and GitHub Actions for validation and Pages deployment.
+**Architecture:** 零构建静态站。`index.html` 只提供骨架；数据、播放、进度和路由分成独立脚本。Hash 路由兼容 GitHub Pages 子路径。录音只保留被数据引用的美式文件。
 
-**Tech Stack:** HTML5, CSS, vanilla JavaScript ES modules, Web Audio/HTMLAudioElement, `localStorage`, Node.js 22 built-in test runner, GitHub Actions, GitHub Pages.
+**Tech Stack:** HTML, CSS, vanilla JS, Node 测试脚本, GitHub Actions Pages
 
 ## Global Constraints
 
-- The visible curriculum contains exactly 41 modern American KK sounds: 17 vowels and 24 consonants.
-- Do not display British pronunciation controls, British notes, `WUK_` assets, or `/ɒ ɜː əʊ ɪə eə ʊə tr dr ts dz/` as independent curriculum sounds.
-- All 41 sounds remain visible and directly accessible; progress guides but never locks content.
-- Each lesson follows standard sound, articulation, examples, minimal pair, then listening quiz.
-- The site has no runtime framework, package dependency, backend, account, or build requirement.
-- Progress is anonymous and local to the browser.
-- A `main` push validates and deploys the public GitHub Pages site.
+- 只展示 41 个现代美式 KK 音素：`/iː ɪ ɛ æ ʌ ə uː ʊ ɑ ɔ ɝ ɚ eɪ aɪ ɔɪ aʊ oʊ p b t d k g f v θ ð s z ʃ ʒ h tʃ dʒ m n ŋ l r j w/`
+- 禁止英音切换、英式备注、`WUK_` 录音，以及 `/ɒ ɜː əʊ ɪə eə ʊə tr dr ts dz/`
+- 首页必须完整展示 6 个阶段和 41 个音，未学内容仍可点击
+- 单音页固定五步：标准音 → 发音方法 → 例词 → 最小对立 → 听辨自测
+- 进度存 `localStorage`，不可用时仍可学习
+- 推送 `main` 后 GitHub Pages 自动发布
+
+## File Map
+
+- Create: `tests/check-data.mjs`
+- Create: `src/data/phonemes.js`
+- Create: `src/audio.js`
+- Create: `src/progress.js`
+- Create: `src/mouth.js`
+- Create: `src/app.js`
+- Create: `assets/styles.css`
+- Create: `.github/workflows/pages.yml`
+- Create: `.nojekyll`
+- Modify: `index.html`
+- Modify: `README.md`
+- Delete unused: `audio/WUK_*.mp3` and unused isolated files not referenced by KK data
 
 ---
 
-### Task 1: Curriculum data and validation
+### Task 1: Data contract and phoneme catalog
 
 **Files:**
-- Create: `package.json`
+- Create: `tests/check-data.mjs`
 - Create: `src/data/phonemes.js`
-- Create: `tests/curriculum.test.mjs`
-- Create: `scripts/validate-content.mjs`
 
 **Interfaces:**
-- Produces: `PHONEMES`, `STAGES`, `MINIMAL_PAIRS`, `FORBIDDEN_SYMBOLS`.
-- Each phoneme has `id`, `order`, `symbol`, `stage`, `title`, `priority`, `articulation`, `mistakes`, `phonemeAudio`, `examples`, and `contrasts`.
+- Produces: `window.KK = { STAGES, PHONEMES, PAIRS, getPhoneme, audioFiles }`
+- Each phoneme: `{ id, symbol, order, stageId, focus, isolated, tip, mistake, method, art, words[], contrastIds[] }`
+- Each word: `{ word, ipa, audio }`
+- Isolated: `{ file, kind: "phoneme"|"exemplar" }`
 
-- [ ] **Step 1: Add the Node test command and failing curriculum tests**
+- [ ] **Step 1: Write the failing data check**
 
-```json
-{
-  "name": "phonetic-symbol",
-  "private": true,
-  "type": "module",
-  "scripts": {
-    "test": "node --test",
-    "validate": "node scripts/validate-content.mjs"
-  }
-}
-```
+`tests/check-data.mjs` must fail until `src/data/phonemes.js` exists and satisfies:
 
-The tests must assert:
+1. exactly 41 unique `id` and unique `symbol`
+2. `order` is `1..41`
+3. forbidden symbols and `WUK_` never appear
+4. every referenced mp3 exists, is non-empty, and lives under `audio/`
+5. unused mp3 files are reported as failures so they are not published
 
-```js
-assert.equal(PHONEMES.length, 41);
-assert.equal(new Set(PHONEMES.map(item => item.symbol)).size, 41);
-assert.deepEqual(PHONEMES.map(item => item.order), Array.from({ length: 41 }, (_, i) => i + 1));
-assert.equal(PHONEMES.filter(item => item.stage <= 2).length, 17);
-assert.ok(PHONEMES.every(item => item.examples.length >= 3));
-assert.ok(FORBIDDEN_SYMBOLS.every(symbol => !JSON.stringify(PHONEMES).includes(symbol)));
-```
+- [ ] **Step 2: Implement 41-phoneme catalog using modern KK and existing WUS/P files**
 
-- [ ] **Step 2: Run the test and verify the missing module failure**
+Map isolated audio as:
 
-Run: `npm test`
+- `/ɛ/` → `P_e.mp3`
+- `/ɑ/` → `P_ɑː.mp3`
+- `/ɔ/` → `P_ɔː.mp3`
+- `/ɝ/` → `P_ɜː.mp3`
+- `/ɚ/` → `P_ɚ.mp3` copied from `P_ɜː.mp3`
+- `/eɪ aɪ ɔɪ oʊ/` → exemplar words `day eye boy go`
+- `/aʊ/` → `D_aʊ.mp3`
 
-Expected: FAIL because `src/data/phonemes.js` does not exist.
+- [ ] **Step 3: Run `node tests/check-data.mjs` until it passes**
+- [ ] **Step 4: Commit data, tests, and used audio mapping**
 
-- [ ] **Step 3: Implement the six stages and all 41 phonemes**
-
-Use these exact stage ranges and symbols:
-
-```js
-export const STAGES = [
-  { id: 1, title: "核心元音与最小对立", range: [1, 10], priority: "最优先", days: 7 },
-  { id: 2, title: "卷舌元音与双元音", range: [11, 17], priority: "最优先", days: 5 },
-  { id: 3, title: "爆破音：清浊成对", range: [18, 23], priority: "高优先", days: 4 },
-  { id: 4, title: "摩擦音：重点纠错", range: [24, 32], priority: "高优先", days: 7 },
-  { id: 5, title: "破擦音与鼻音", range: [33, 37], priority: "进阶", days: 4 },
-  { id: 6, title: "流音与半元音", range: [38, 41], priority: "进阶", days: 3 }
-];
-
-const SYMBOLS = [
-  "iː", "ɪ", "ɛ", "æ", "ʌ", "ə", "uː", "ʊ", "ɑ", "ɔ",
-  "ɝ", "ɚ", "eɪ", "aɪ", "ɔɪ", "aʊ", "oʊ",
-  "p", "b", "t", "d", "k", "g", "f", "v", "θ", "ð", "s", "z",
-  "ʃ", "ʒ", "h", "tʃ", "dʒ", "m", "n", "ŋ", "l", "r", "j", "w"
-];
-```
-
-Every example must use an American transcription and a `WUS_*.mp3` file that exists locally. Missing isolated sounds may use an example-word recording, but the UI must label it as an example rather than a verified isolated phoneme.
-
-- [ ] **Step 4: Implement the content validator**
-
-`scripts/validate-content.mjs` imports the curriculum, checks all invariants, resolves audio paths from the repository root, rejects missing/zero-byte files, and scans rendered curriculum text for forbidden symbols and `WUK_`.
-
-- [ ] **Step 5: Run validation**
-
-Run: `npm test && npm run validate`
-
-Expected: all tests pass and validation prints `Validated 41 phonemes`.
-
-- [ ] **Step 6: Commit**
-
-```bash
-git add package.json src/data/phonemes.js tests/curriculum.test.mjs scripts/validate-content.mjs
-git commit -m "建立现代美式 KK 课程数据"
-```
-
-### Task 2: Audio and progress modules
+### Task 2: Player, progress, and mouth diagram
 
 **Files:**
 - Create: `src/audio.js`
 - Create: `src/progress.js`
-- Create: `tests/progress.test.mjs`
+- Create: `src/mouth.js`
 
 **Interfaces:**
-- `createAudioPlayer({ AudioCtor })` returns `play(file, options)`, `stop()`, and `isPlaying()`.
-- `createProgressStore(storage)` returns `load()`, `complete(id)`, `recordMistake(id)`, `toggleFavorite(id)`, and `reset()`.
-- Progress shape: `{ completed: string[], mistakes: Record<string, number>, favorites: string[] }`.
+- `KKAudio.play(file, { rate=1, times=1, onError })`
+- `KKAudio.stop()`
+- `KKProgress.load()/save()/markLearned(id)/addReview(id)/toggleStar(id)/setCurrent(id)`
+- `KKMouth.svg(art, symbol)` returns safe SVG HTML
 
-- [ ] **Step 1: Write failing progress tests**
+- [ ] **Step 1: Single-instance audio player with encoded filenames and visible errors**
+- [ ] **Step 2: localStorage progress with in-memory fallback**
+- [ ] **Step 3: Port the existing mouth diagram, keyed by modern KK art objects**
+- [ ] **Step 4: Commit**
 
-Cover default state, corrupt JSON recovery, idempotent completion, mistake increments, favorite toggling, reset, and unavailable storage.
-
-```js
-const store = createProgressStore(memoryStorage());
-store.complete("i-long");
-store.complete("i-long");
-assert.deepEqual(store.load().completed, ["i-long"]);
-```
-
-- [ ] **Step 2: Run the focused test**
-
-Run: `node --test tests/progress.test.mjs`
-
-Expected: FAIL because `src/progress.js` does not exist.
-
-- [ ] **Step 3: Implement defensive progress persistence**
-
-Use one key, `modern-kk-progress-v1`. Validate loaded arrays and objects; return an in-memory default if storage throws. Do not block learning when persistence is unavailable.
-
-- [ ] **Step 4: Implement single-instance audio playback**
-
-`play()` must stop the previous audio, URL-encode only the file name, apply `playbackRate`, preserve pitch when supported, repeat using the same element, and return a promise that rejects with the concrete file name.
-
-- [ ] **Step 5: Run tests and lint-level syntax checks**
-
-Run: `npm test && node --check src/audio.js && node --check src/progress.js`
-
-Expected: PASS.
-
-- [ ] **Step 6: Commit**
-
-```bash
-git add src/audio.js src/progress.js tests/progress.test.mjs
-git commit -m "加入音频播放和学习进度"
-```
-
-### Task 3: Responsive learning experience
+### Task 3: Learning map UI and lesson flow
 
 **Files:**
-- Replace: `index.html`
 - Create: `assets/styles.css`
 - Create: `src/app.js`
-- Create: `src/views/map.js`
-- Create: `src/views/lesson.js`
-- Create: `src/views/practice.js`
+- Modify: `index.html`
 
 **Interfaces:**
-- `renderMap({ phonemes, stages, progress })`
-- `renderLesson({ phoneme, progress })`
-- `renderQuiz({ candidates, answerId })`
-- Hash routes: `#/map`, `#/sound/:id`, `#/quiz`, `#/pairs`, `#/review`.
+- Hash routes: `#/map`, `#/sound/<id>`, `#/quiz`, `#/pairs`, `#/review`
+- `index.html` has `#app` only; all interactive UI is rendered by `src/app.js`
 
-- [ ] **Step 1: Replace the shell with semantic, accessible landmarks**
+- [ ] **Step 1: Recreate the confirmed motivating map layout**
+- [ ] **Step 2: Render the five-step lesson page with prev/map/next**
+- [ ] **Step 3: Quiz, minimal pairs, and review views**
+- [ ] **Step 4: Commit**
 
-`index.html` contains a skip link, header navigation, `<main id="app">`, a live status region, stylesheet link, and `type="module"` entry point. The initial HTML explains that JavaScript is required without showing stale curriculum content.
-
-- [ ] **Step 2: Implement the approved visual system**
-
-Port the confirmed motivating learning-map direction:
-
-- gradient but restrained hero;
-- primary “从第 1 课开始” action;
-- 41/6/15-minute summary;
-- six colored stage cards;
-- yellow focus treatment for common Mandarin-speaker errors;
-- visible hover/focus states;
-- single-column mobile layout below 850 px;
-- respect `prefers-reduced-motion` and dark mode.
-
-- [ ] **Step 3: Render the complete map**
-
-All 41 sounds display with order numbers. Completed/current/unseen states are distinct, but every sound remains an anchor to `#/sound/:id`.
-
-- [ ] **Step 4: Render the five-step lesson**
-
-The lesson includes:
-
-```text
-1 听标准音
-2 看口型和舌位
-3 学美式例词
-4 做最小对立
-5 听辨自测
-```
-
-Audio controls provide normal, slow, and repeat-three. Completion occurs only after answering the lesson quiz; mistakes are recorded on wrong answers.
-
-- [ ] **Step 5: Implement practice, pairs, and review views**
-
-Quiz candidates are unique and include the correct answer. Review orders sounds by mistake count, then favorites. Empty review state links back to the map.
-
-- [ ] **Step 6: Verify keyboard and responsive behavior**
-
-Run a local server and verify:
-
-```powershell
-python -m http.server 8765
-```
-
-Browser path: map → first sound → isolated/example audio → wrong answer → correct answer → map. Repeat at desktop and 390 px mobile width. Confirm browser back/forward works and no console/network errors occur.
-
-- [ ] **Step 7: Run automated checks and commit**
-
-Run: `npm test && npm run validate`
-
-```bash
-git add index.html assets src
-git commit -m "实现现代 KK 学习地图和课程交互"
-```
-
-### Task 4: Audio resource cleanup and regression review
-
-**Files:**
-- Modify: `audio/`
-- Modify: `README.md`
-- Modify: `scripts/validate-content.mjs`
-
-**Interfaces:**
-- Published audio set equals the union of `phonemeAudio` and all example audio references from `PHONEMES`.
-
-- [ ] **Step 1: Generate referenced and unreferenced audio reports**
-
-The validator prints counts for referenced, missing, zero-byte, and unreferenced files. It must fail for missing/zero-byte/`WUK_` references, but unreferenced files are reported before cleanup.
-
-- [ ] **Step 2: Remove British and unused recordings from the new site**
-
-Delete `WUK_*.mp3` and recordings not referenced by the 41-sound curriculum after confirming the validator report. Do not delete any referenced `WUS_`, `P_`, or `D_` file.
-
-- [ ] **Step 3: Update documentation**
-
-README explains modern American KK scope, local opening via HTTP server, the six stages, test commands, progress storage, and deployment behavior.
-
-- [ ] **Step 4: Review all generated and affected code**
-
-Check symbol consistency, audio mapping, HTML escaping, event delegation, storage failure behavior, keyboard focus, mobile overflow, and duplication. Search the entire repository for forbidden British symbols and `WUK_`.
-
-- [ ] **Step 5: Verify and commit**
-
-Run: `npm test && npm run validate`
-
-Expected: 41 phonemes, zero missing audio, zero forbidden references, zero unreferenced published audio.
-
-```bash
-git add -A
-git commit -m "清理非美式录音并完善文档"
-```
-
-### Task 5: GitHub Pages deployment
+### Task 4: Verify locally then publish
 
 **Files:**
 - Create: `.github/workflows/pages.yml`
+- Create: `.nojekyll`
+- Modify: `README.md`
 
-**Interfaces:**
-- Trigger: push to `main` and manual dispatch.
-- Validation job runs tests before upload.
-- Deployment uses GitHub's official Pages actions.
-
-- [ ] **Step 1: Create the public GitHub repository**
-
-Create `StayGoldTY/Phonetic-Symbol` as public without replacing the existing Cursor `origin`. Add GitHub as remote `github`.
-
-- [ ] **Step 2: Add the Pages workflow**
-
-Use:
-
-```yaml
-permissions:
-  contents: read
-  pages: write
-  id-token: write
-```
-
-The workflow checks out code, sets up Node 22, runs `npm test` and `npm run validate`, configures Pages, uploads the repository as the static artifact, and deploys it.
-
-- [ ] **Step 3: Push both remotes**
-
-Push `main` to Cursor Origin and GitHub. Confirm both remote branch hashes equal local `HEAD`.
-
-- [ ] **Step 4: Verify the workflow and production URL**
-
-Wait for the Pages workflow to succeed. Open the production URL and verify map rendering, first lesson navigation, one isolated/example sound, one word sound, and mobile layout. Confirm HTTP 200 and no console/network errors.
-
-- [ ] **Step 5: Record final deployment state**
-
-Report separately:
-
-- local implementation complete;
-- commits created;
-- Cursor Origin pushed;
-- GitHub pushed;
-- Pages deployed;
-- production behavior verified.
-
+- [ ] **Step 1: Run data check and browser path: map → lesson 1 → play isolated → play word → quiz → back to map**
+- [ ] **Step 2: Create public GitHub repo `StayGoldTY/Phonetic-Symbol` with remote name `github`, keep Origin as `origin`**
+- [ ] **Step 3: Enable GitHub Pages from Actions; push `main` to `origin` and `github`**
+- [ ] **Step 4: Verify the live Pages URL returns 200 and can load one isolated sound and one word**

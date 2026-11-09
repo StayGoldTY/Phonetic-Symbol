@@ -1,0 +1,7 @@
+{
+  "name": "phonetic-symbol",
+  "private": true,
+  "scripts": {
+    "test": "node tests/check-data.mjs"
+  }
+}
