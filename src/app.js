@@ -126,7 +126,7 @@
     mount.innerHTML = '<div class="playrow"><button class="plain" data-play="' + esc(phoneme.isolated.file) + '">再听一遍</button></div><div class="quiz-options">' +
       options.map(function (p) {
         return '<button data-answer="' + p.id + '" data-expect="' + phoneme.id + '">/' + esc(p.symbol) + "/</button>";
-      }).join("") + '</div><div class="err" data-quiz-result></div>';
+      }).join("") + '</div><div class="quiz-result" data-quiz-result></div>';
     playFile(phoneme.isolated.file, { rate: 1, times: 1 });
   }
 
@@ -195,13 +195,22 @@
     }
     var answer = event.target.closest("[data-answer]");
     if (answer) {
+      var options = answer.closest(".quiz-options");
+      if (!options || options.getAttribute("data-done") === "1") return;
+      options.setAttribute("data-done", "1");
+      Array.prototype.forEach.call(options.querySelectorAll("[data-answer]"), function (btn) {
+        btn.disabled = true;
+      });
       var ok = answer.getAttribute("data-answer") === answer.getAttribute("data-expect");
       KKProgress.recordQuiz(ok);
       if (ok) KKProgress.markLearned(answer.getAttribute("data-expect"));
       else KKProgress.addReview(answer.getAttribute("data-expect"));
       var box = root.querySelector("[data-quiz-result]");
       var phoneme = byId(answer.getAttribute("data-expect"));
-      if (box) box.textContent = ok ? "正确。/" + phoneme.symbol + "/ 已标记为已学。" : "不对，正确答案是 /" + phoneme.symbol + "/。已加入复习。";
+      if (box) {
+        box.className = ok ? "quiz-result ok" : "quiz-result bad";
+        box.textContent = ok ? "正确。/" + phoneme.symbol + "/ 已标记为已学。" : "不对，正确答案是 /" + phoneme.symbol + "/。已加入复习。";
+      }
     }
   });
 

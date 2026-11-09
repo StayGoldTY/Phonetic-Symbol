@@ -2,7 +2,9 @@
 
 现代美式 KK 发音学习站：41 个音、6 个阶段，按重要性从第 1 课学到最后一课。
 
-打开 `index.html` 即可。录音都在 `audio/`，页面用相对路径播放。
+在线地址：https://staygoldty.github.io/Phonetic-Symbol/
+
+本地打开 `index.html` 即可。录音都在 `audio/`，页面用相对路径播放。推送到 `main` 后，GitHub Pages 会自动发布。
 
 ## 学习方式
 
